@@ -268,8 +268,15 @@
     <div id="customer-sections" class="space-y-6"></div>
   </main>
 
-  <!-- 管理者用：本日データクリア -->
-  <footer class="mt-10 flex justify-center">
+  <!-- 管理者用：設定の受け渡し・本日データクリア -->
+  <footer class="mt-10 flex justify-center gap-3 flex-wrap">
+    <button id="btn-export-settings" onclick="exportSettings()" class="btn-press text-sm font-bold text-[var(--ink)] bg-white border-2 border-[var(--card-border)] rounded-xl px-5 py-3 shadow-sm">
+      ⚙ 設定をエクスポート
+    </button>
+    <button id="btn-import-settings" onclick="document.getElementById('import-settings-file').click()" class="btn-press text-sm font-bold text-[var(--ink)] bg-white border-2 border-[var(--card-border)] rounded-xl px-5 py-3 shadow-sm">
+      ⚙ 設定をインポート
+    </button>
+    <input id="import-settings-file" type="file" accept=".json,application/json" class="hidden" onchange="importSettings(this)">
     <button id="btn-clear-data" onclick="confirmClear()" class="btn-press text-sm font-bold text-[var(--red)] border-2 border-[var(--red)] rounded-xl px-5 py-3">
       🗑 本日のデータをクリア（全消去）
     </button>
@@ -1617,6 +1624,76 @@ function confirmClear(){
 }
 
 /* ============================================================
+   設定のエクスポート／インポート
+   （利用者・部署・商品・部署パスワードを、公開せずに端末間で受け渡すための機能）
+   ============================================================ */
+function exportSettings(){
+  const settings = {
+    app: 'baiten-pos',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    departments: departments,
+    customers: customers,
+    products: products,
+    deptPasswords: deptPasswords,
+  };
+  const blob = new Blob([JSON.stringify(settings, null, 1)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const d = new Date();
+  a.href = url;
+  a.download = `売店POS設定_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('設定をエクスポートしました', '⚙');
+}
+
+function importSettings(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  inputEl.value = ''; // 同じファイルを続けて選べるようにリセット
+  if(!file) return;
+
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    let settings;
+    try {
+      settings = JSON.parse(reader.result);
+    } catch(e){
+      showToast('ファイルを読み込めませんでした（JSON形式ではありません）', '⚠️');
+      return;
+    }
+    if(!settings || settings.app !== 'baiten-pos' || !Array.isArray(settings.customers) || !Array.isArray(settings.departments)){
+      showToast('売店POSの設定ファイルではありません', '⚠️');
+      return;
+    }
+
+    const custCount = settings.customers.length;
+    const deptCount = settings.departments.length;
+    openConfirm(`設定ファイルを読み込みます。\n部署 ${deptCount}件・利用者 ${custCount}名・商品 ${(settings.products||[]).length}件\n\n現在この端末に登録されている利用者・部署・商品は、\nこの内容にすべて置き換えられます（販売データは残ります）。\nよろしいですか？`, ()=>{
+      departments = settings.departments;
+      customers = settings.customers;
+      if(Array.isArray(settings.products) && settings.products.length > 0){
+        products = settings.products;
+        saveProducts(products);
+      }
+      if(settings.deptPasswords && typeof settings.deptPasswords === 'object'){
+        deptPasswords = settings.deptPasswords;
+        saveDeptPasswords(deptPasswords);
+      }
+      saveDepartments(departments);
+      saveCustomers(customers);
+      currentDeptFilter = null;
+      renderDashboard();
+      renderCustomerGrid();
+      showToast(`設定を読み込みました（利用者${custCount}名）`, '✅');
+    });
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+/* ============================================================
    トースト通知
    ============================================================ */
 let toastTimer = null;
@@ -1757,6 +1834,8 @@ function applyRolePermissions(){
   document.getElementById('btn-master-products').classList.toggle('hidden', !isAdmin);
   document.getElementById('btn-master-depts').classList.toggle('hidden', !isAdmin);
   document.getElementById('btn-clear-data').classList.toggle('hidden', !isAdmin);
+  document.getElementById('btn-export-settings').classList.toggle('hidden', !isAdmin);
+  document.getElementById('btn-import-settings').classList.toggle('hidden', !isAdmin);
   document.getElementById('dept-tabs').classList.toggle('hidden', !isAdmin); // 部署ログインは部署切替タブ自体を出さない
 
   const badge = document.getElementById('role-badge');
