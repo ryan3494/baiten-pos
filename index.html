@@ -1,0 +1,1788 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="売店POS">
+<meta name="theme-color" content="#FBF6EC">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%23E2672A'/%3E%3Ctext x='90' y='118' font-size='80' text-anchor='middle' fill='%23FBF6EC' font-family='sans-serif' font-weight='bold'%3E%E5%A3%B2%3C/text%3E%3C/svg%3E">
+<title>売店POS｜お菓子の販売入力</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@500;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBF6EC;
+    --paper-dark:#F1E6D2;
+    --ink:#4A3428;
+    --ink-soft:#8A7864;
+    --orange:#E2672A;
+    --orange-dark:#C74F19;
+    --green:#4F7A5B;
+    --green-dark:#3C5F46;
+    --yellow:#E8B84B;
+    --red:#C0392B;
+    --card-border:#E3D3B8;
+  }
+  *{ font-family:'Noto Sans JP', sans-serif; -webkit-tap-highlight-color: transparent; }
+  html,body{ background:var(--paper); color:var(--ink); overscroll-behavior:none; }
+  .num{ font-variant-numeric: tabular-nums; }
+
+  /* 値札（price tag）風のパーツ：ダッシュボード合計・フッター合計に使用 */
+  .price-tag{
+    position:relative;
+    clip-path: polygon(28px 0, 100% 0, 100% 100%, 28px 100%, 0 50%);
+    padding-left:44px;
+  }
+  .price-tag::before{
+    content:'';
+    position:absolute;
+    left:14px; top:50%;
+    width:11px; height:11px;
+    border-radius:9999px;
+    background:var(--paper);
+    transform:translateY(-50%);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.25);
+  }
+
+  /* 紙袋・お菓子の包み紙を思わせる、点線＋角丸のカード */
+  .snack-card{
+    border:2px dashed var(--card-border);
+    background:#fff;
+    border-radius:1.25rem;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+  .snack-card:active{ transform:scale(.96); }
+
+  .user-card{
+    border:2px solid var(--card-border);
+    background:#fff;
+    border-radius:1.5rem;
+    transition: transform .12s ease, box-shadow .12s ease;
+    box-shadow: 0 4px 0 var(--card-border);
+  }
+  .user-card:active{ transform:translateY(3px); box-shadow:0 1px 0 var(--card-border); }
+
+  .btn-press:active{ transform:scale(.95); }
+
+  .qty-btn{
+    width:3.25rem; height:3.25rem;
+    border-radius:9999px;
+    font-size:1.5rem;
+    font-weight:900;
+    display:flex; align-items:center; justify-content:center;
+    transition: transform .1s ease;
+    user-select:none;
+  }
+  .qty-btn:active{ transform:scale(.88); }
+
+  ::-webkit-scrollbar{ width:10px; }
+  ::-webkit-scrollbar-thumb{ background:var(--card-border); border-radius:9999px; }
+
+  .modal-backdrop{ background:rgba(74,52,40,.45); backdrop-filter: blur(2px); }
+
+  .toast{
+    transition: transform .3s cubic-bezier(.2,.9,.3,1), opacity .3s ease;
+  }
+
+  .fade-in{ animation: fadeIn .18s ease both; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+
+  .stitch{
+    border-bottom:2px dashed var(--card-border);
+  }
+
+  /* 部署の「ファイル見出し」風タブ（フォルダの背表紙をイメージ） */
+  .folder-tab{
+    display:inline-flex;
+    align-items:center;
+    gap:.4rem;
+    padding:.55rem 1.1rem;
+    border-radius:.75rem .75rem 0 0;
+    font-weight:700;
+    font-size:.85rem;
+    background:var(--paper-dark);
+    color:var(--ink-soft);
+    border:2px solid var(--card-border);
+    border-bottom:none;
+    white-space:nowrap;
+    transition: transform .1s ease, background .12s ease, color .12s ease;
+  }
+  .folder-tab.active{
+    background:var(--ink);
+    color:#fff;
+    border-color:var(--ink);
+    transform:translateY(-2px);
+  }
+  .folder-tab:active{ transform:scale(.95); }
+
+  .folder-section{
+    background:#fff;
+    border:2px solid var(--card-border);
+    border-radius:0 1.25rem 1.25rem 1.25rem;
+    padding:1.1rem;
+  }
+
+  /* CSVプレビュー用テーブル */
+  #csv-preview-table-wrap table{ border-collapse:collapse; width:100%; }
+  #csv-preview-table-wrap th, #csv-preview-table-wrap td{
+    border:1px solid var(--card-border);
+    padding:.4rem .6rem;
+    white-space:nowrap;
+    font-size:.75rem;
+  }
+  #csv-preview-table-wrap th{
+    position:sticky; top:0;
+    background:var(--ink);
+    color:#fff;
+    font-weight:700;
+  }
+  #csv-preview-table-wrap tr:nth-child(even) td{ background:var(--paper-dark); }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- ============ ログイン画面（部署パスワード／管理者パスワード） ============ -->
+<div id="login-screen" class="fixed inset-0 z-[100] bg-[var(--paper)] flex items-center justify-center p-6">
+  <div class="fade-in bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6">
+    <p class="text-xs font-bold text-[var(--ink-soft)] tracking-wide mb-1">フェイトン 売店</p>
+    <h1 class="text-2xl font-black mb-5">ログイン</h1>
+
+    <div class="flex gap-1.5 mb-5">
+      <button id="login-tab-dept" onclick="setLoginMode('dept')" class="folder-tab active">部署としてログイン</button>
+      <button id="login-tab-admin" onclick="setLoginMode('admin')" class="folder-tab">管理者としてログイン</button>
+    </div>
+
+    <!-- 部署ログイン -->
+    <div id="login-form-dept" class="space-y-3">
+      <div>
+        <label class="text-xs font-bold text-[var(--ink-soft)] block mb-1">部署</label>
+        <select id="login-dept-select" class="w-full border-2 border-[var(--card-border)] rounded-xl px-3 py-3 text-sm font-bold"></select>
+      </div>
+      <div>
+        <label class="text-xs font-bold text-[var(--ink-soft)] block mb-1">部署のパスワード</label>
+        <input id="login-dept-password" type="password" class="w-full border-2 border-[var(--card-border)] rounded-xl px-3 py-3 text-sm font-bold" placeholder="パスワードを入力">
+      </div>
+      <p id="login-dept-error" class="hidden text-xs font-bold text-[var(--red)]"></p>
+      <button onclick="loginAsDepartment()" class="btn-press w-full bg-[var(--ink)] text-white rounded-xl py-3 font-bold text-sm mt-1">ログイン</button>
+    </div>
+
+    <!-- 管理者ログイン（初回はパスワード設定） -->
+    <div id="login-form-admin" class="hidden space-y-3">
+      <p id="login-admin-setup-note" class="hidden text-xs font-bold text-[var(--ink-soft)] bg-[var(--paper-dark)] rounded-lg px-3 py-2">初回のご利用です。管理者パスワードを設定してください。</p>
+      <div>
+        <label class="text-xs font-bold text-[var(--ink-soft)] block mb-1">管理者パスワード</label>
+        <input id="login-admin-password" type="password" class="w-full border-2 border-[var(--card-border)] rounded-xl px-3 py-3 text-sm font-bold" placeholder="パスワードを入力">
+      </div>
+      <div id="login-admin-confirm-wrap" class="hidden">
+        <label class="text-xs font-bold text-[var(--ink-soft)] block mb-1">パスワード（確認用）</label>
+        <input id="login-admin-password-confirm" type="password" class="w-full border-2 border-[var(--card-border)] rounded-xl px-3 py-3 text-sm font-bold" placeholder="もう一度入力">
+      </div>
+      <p id="login-admin-error" class="hidden text-xs font-bold text-[var(--red)]"></p>
+      <button id="login-admin-submit" onclick="loginAsAdmin()" class="btn-press w-full bg-[var(--ink)] text-white rounded-xl py-3 font-bold text-sm mt-1">ログイン</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ トースト通知 ============ -->
+<div id="toast" class="toast fixed left-1/2 -translate-x-1/2 bottom-8 z-50 opacity-0 translate-y-6 pointer-events-none">
+  <div class="flex items-center gap-3 bg-[var(--ink)] text-white px-6 py-4 rounded-2xl shadow-xl text-lg font-bold">
+    <span id="toast-icon">✅</span>
+    <span id="toast-msg">登録しました</span>
+  </div>
+</div>
+
+<!-- ============ 画面①：利用者選択画面 ============ -->
+<div id="screen-customers" class="max-w-6xl mx-auto px-4 pb-16">
+
+  <!-- ダッシュボード -->
+  <header class="pt-6 pb-4">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <p class="text-sm font-bold text-[var(--ink-soft)] tracking-wide">フェイトン 売店</p>
+        <h1 class="text-2xl md:text-3xl font-black">お菓子の販売入力</h1>
+        <p class="mt-1 text-xs font-bold text-[var(--ink-soft)]">
+          <span id="role-badge" class="inline-block bg-[var(--paper-dark)] rounded-full px-3 py-1"></span>
+          <button onclick="logout()" class="btn-press underline ml-1">ログアウト</button>
+        </p>
+      </div>
+      <div class="flex gap-2 flex-wrap justify-end">
+        <button id="btn-master-customers" onclick="openMasterModal()" class="btn-press bg-white border-2 border-[var(--card-border)] rounded-xl px-4 py-3 font-bold text-sm text-[var(--ink)] shadow-sm">
+          👤 利用者マスタ編集
+        </button>
+        <button id="btn-master-products" onclick="openProductModal()" class="btn-press bg-white border-2 border-[var(--card-border)] rounded-xl px-4 py-3 font-bold text-sm text-[var(--ink)] shadow-sm">
+          🍬 商品マスタ編集
+        </button>
+        <button onclick="openCSVPreview()" class="btn-press bg-[var(--green)] text-white rounded-xl px-4 py-3 font-bold text-sm shadow-sm">
+          ⬇ Excel（CSV）ダウンロード
+        </button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4 mb-4">
+      <div class="price-tag bg-[var(--orange)] text-white py-4 shadow-md">
+        <p class="text-xs font-bold opacity-90">本日の売上累計額</p>
+        <p class="text-3xl md:text-4xl font-black num"><span id="total-sales">0</span>円</p>
+      </div>
+      <div class="price-tag bg-[var(--ink)] text-white py-4 shadow-md">
+        <p class="text-xs font-bold opacity-90">取引件数</p>
+        <p class="text-3xl md:text-4xl font-black num"><span id="total-count">0</span>件</p>
+      </div>
+    </div>
+
+    <div class="snack-card p-4">
+      <p class="font-bold text-xs text-[var(--ink-soft)] mb-2">入力情報（この内容が登録データに記録されます）</p>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-bold text-[var(--ink-soft)] block mb-1">入力した日付</label>
+          <input id="session-date" type="date" class="w-full border-2 border-[var(--card-border)] rounded-xl px-3 py-3 text-sm font-bold">
+        </div>
+        <div>
+          <label class="text-xs font-bold text-[var(--ink-soft)] block mb-1">入力した人の名前</label>
+          <input id="session-staff" type="text" placeholder="例：山田 太郎" class="w-full border-2 border-[var(--card-border)] rounded-xl px-3 py-3 text-sm font-bold">
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 利用者カード（部署ごとにファイリング） -->
+  <main>
+    <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+      <p class="text-sm font-bold text-[var(--ink-soft)]">利用者を選んでください</p>
+      <div class="flex gap-2">
+        <button onclick="openRecordsModal()" class="btn-press bg-white border-2 border-[var(--card-border)] rounded-xl px-3 py-2 font-bold text-xs text-[var(--ink)] shadow-sm">
+          📋 登録データを見る・編集する
+        </button>
+        <button onclick="openProductSummaryModal()" class="btn-press bg-white border-2 border-[var(--card-border)] rounded-xl px-3 py-2 font-bold text-xs text-[var(--ink)] shadow-sm">
+          📊 商品別の販売数を見る
+        </button>
+        <button id="btn-master-depts" onclick="openDeptModal()" class="btn-press bg-white border-2 border-[var(--card-border)] rounded-xl px-3 py-2 font-bold text-xs text-[var(--ink)] shadow-sm">
+          🗂 部署の管理
+        </button>
+      </div>
+    </div>
+    <div id="dept-tabs" class="flex gap-1.5 overflow-x-auto pb-0 pt-1"></div>
+    <div id="customer-sections" class="space-y-6"></div>
+  </main>
+
+  <!-- 管理者用：本日データクリア -->
+  <footer class="mt-10 flex justify-center">
+    <button id="btn-clear-data" onclick="confirmClear()" class="btn-press text-sm font-bold text-[var(--red)] border-2 border-[var(--red)] rounded-xl px-5 py-3">
+      🗑 本日のデータをクリア（全消去）
+    </button>
+  </footer>
+</div>
+
+<!-- ============ 画面②：商品入力画面 ============ -->
+<div id="screen-order" class="hidden min-h-screen flex flex-col">
+  <header class="stitch bg-white px-4 pt-5 pb-4 sticky top-0 z-20 shadow-sm">
+    <div class="flex items-center gap-3 mb-2">
+      <button onclick="backToCustomers()" class="btn-press bg-[var(--paper-dark)] rounded-xl px-4 py-3 font-bold text-sm">← 戻る</button>
+      <div class="flex-1">
+        <p class="text-xs font-bold text-[var(--ink-soft)]">得意先コード：<span id="order-code" class="num"></span></p>
+        <h2 id="order-name" class="text-2xl md:text-3xl font-black leading-tight"></h2>
+      </div>
+    </div>
+    <p class="text-xs font-bold text-[var(--ink-soft)]">入力日：<span id="order-session-date" class="num"></span>　入力者：<span id="order-session-staff"></span></p>
+    <p id="order-editing-note" class="hidden mt-2 text-xs font-bold text-white bg-[var(--orange)] block rounded-lg px-3 py-2 leading-relaxed">
+      📝
+    </p>
+  </header>
+
+  <main class="flex-1 overflow-y-auto px-4 py-5">
+    <div id="product-grid" class="space-y-5 pb-28"></div>
+  </main>
+
+  <footer class="stitch bg-white px-4 py-4 sticky bottom-0 z-20 shadow-[0_-4px_12px_rgba(0,0,0,.06)]">
+    <p class="text-xs font-bold text-[var(--ink-soft)] mb-2 num">内訳　8%対象：<span id="order-tax8">0</span>円／10%対象：<span id="order-tax10">0</span>円</p>
+    <div class="flex items-center gap-3">
+      <div class="price-tag bg-[var(--yellow)] text-[var(--ink)] py-3 px-2 flex-1">
+        <p class="text-xs font-bold">合計金額</p>
+        <p class="text-3xl font-black num"><span id="order-total">0</span>円</p>
+      </div>
+      <button id="btn-confirm-order" onclick="saveOrder()" class="btn-press bg-[var(--green)] text-white font-black text-lg rounded-2xl px-6 py-5 shadow-md">
+        確定（登録する）
+      </button>
+      <button id="btn-update-order" onclick="saveOrder()" class="hidden btn-press bg-[var(--orange)] text-white font-black text-lg rounded-2xl px-6 py-5 shadow-md">
+        変更する
+      </button>
+    </div>
+  </footer>
+</div>
+
+<!-- ============ モーダル：利用者マスタ編集 ============ -->
+<div id="master-modal" class="hidden fixed inset-0 z-40 modal-backdrop flex items-end sm:items-center justify-center">
+  <div class="fade-in bg-[var(--paper)] w-full sm:max-w-lg sm:rounded-3xl rounded-t-3xl max-h-[85vh] overflow-y-auto shadow-2xl">
+    <div class="p-5 stitch bg-white sm:rounded-t-3xl flex items-center justify-between sticky top-0">
+      <h3 class="text-xl font-black">利用者マスタ編集</h3>
+      <button onclick="closeMasterModal()" class="btn-press text-2xl font-black px-2 text-[var(--ink-soft)]">×</button>
+    </div>
+    <div class="p-5 space-y-5">
+      <div id="master-list" class="space-y-2"></div>
+
+      <div class="snack-card p-4">
+        <p class="font-bold text-sm mb-2">個別に追加</p>
+        <div class="flex gap-2 mb-3">
+          <input id="new-code" type="text" placeholder="コード（例：5200）" class="w-24 border-2 border-[var(--card-border)] rounded-xl px-3 py-3 text-sm">
+          <input id="new-name" type="text" placeholder="氏名" class="flex-1 border-2 border-[var(--card-border)] rounded-xl px-3 py-3 text-sm">
+        </div>
+        <p id="new-code-auto-note" class="hidden text-xs font-bold text-[var(--ink-soft)] mb-3">コードは自動で発行されます</p>
+        <select id="new-department" class="w-full border-2 border-[var(--card-border)] rounded-xl px-3 py-3 text-sm mb-3"></select>
+        <button onclick="addCustomerSingle()" class="btn-press w-full bg-[var(--ink)] text-white rounded-xl py-3 font-bold text-sm">＋ 追加</button>
+      </div>
+
+      <div class="snack-card p-4">
+        <p class="font-bold text-sm mb-1">まとめて追加（カンマ区切り）</p>
+        <p id="bulk-add-hint" class="text-xs text-[var(--ink-soft)] mb-2">例：5200:山田 太郎:売店,5201:鈴木 花子:事務所</p>
+        <textarea id="bulk-add" rows="2" class="w-full border-2 border-[var(--card-border)] rounded-xl px-3 py-2 text-sm"></textarea>
+        <button onclick="addCustomerBulk()" class="btn-press w-full mt-2 bg-[var(--ink)] text-white rounded-xl py-3 font-bold text-sm">＋ まとめて追加</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ モーダル：部署の管理 ============ -->
+<div id="dept-modal" class="hidden fixed inset-0 z-40 modal-backdrop flex items-end sm:items-center justify-center">
+  <div class="fade-in bg-[var(--paper)] w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl max-h-[85vh] overflow-y-auto shadow-2xl">
+    <div class="p-5 stitch bg-white sm:rounded-t-3xl flex items-center justify-between sticky top-0">
+      <h3 class="text-xl font-black">部署の管理</h3>
+      <button onclick="closeDeptModal()" class="btn-press text-2xl font-black px-2 text-[var(--ink-soft)]">×</button>
+    </div>
+    <div class="p-5 space-y-5">
+      <div id="dept-list" class="space-y-2"></div>
+
+      <div class="snack-card p-4">
+        <p class="font-bold text-sm mb-2">部署を追加</p>
+        <div class="flex gap-2">
+          <input id="new-dept-name" type="text" placeholder="部署名（例：売店）" class="flex-1 border-2 border-[var(--card-border)] rounded-xl px-3 py-3 text-sm">
+          <button onclick="addDepartment()" class="btn-press bg-[var(--ink)] text-white rounded-xl px-5 font-bold text-sm">＋ 追加</button>
+        </div>
+        <p class="text-xs text-[var(--ink-soft)] mt-2">削除すると、その部署の利用者は「未設定」に移動します。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============ モーダル：商品マスタ編集 ============ -->
+<div id="product-modal" class="hidden fixed inset-0 z-40 modal-backdrop flex items-end sm:items-center justify-center">
+  <div class="fade-in bg-[var(--paper)] w-full sm:max-w-lg sm:rounded-3xl rounded-t-3xl max-h-[85vh] overflow-y-auto shadow-2xl">
+    <div class="p-5 stitch bg-white sm:rounded-t-3xl flex items-center justify-between sticky top-0">
+      <h3 class="text-xl font-black">商品マスタ編集</h3>
+      <button onclick="closeProductModal()" class="btn-press text-2xl font-black px-2 text-[var(--ink-soft)]">×</button>
+    </div>
+    <div class="p-5 space-y-5">
+      <div id="product-list" class="space-y-2"></div>
+
+      <div class="snack-card p-4">
+        <p class="font-bold text-sm mb-2">商品を追加</p>
+        <div class="flex gap-2 mb-3">
+          <input id="new-product-name" type="text" placeholder="商品名（例：ラムネ）" class="flex-1 border-2 border-[var(--card-border)] rounded-xl px-3 py-3 text-sm">
+          <input id="new-product-price" type="number" min="0" step="1" placeholder="単価" class="w-24 border-2 border-[var(--card-border)] rounded-xl px-3 py-3 text-sm num">
+        </div>
+        <p class="text-xs font-bold text-[var(--ink-soft)] mb-2">消費税率</p>
+        <select id="new-product-tax" class="w-full border-2 border-[var(--card-border)] rounded-xl px-3 py-3 text-sm mb-3">
+          <option value="8">8％（軽減税率対象：飲食料品など）</option>
+          <option value="10">10％（標準税率）</option>
+        </select>
+        <button onclick="addProduct()" class="btn-press w-full bg-[var(--ink)] text-white rounded-xl py-3 font-bold text-sm">＋ 追加</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============ モーダル：CSVプレビュー ============ -->
+<div id="csv-preview-modal" class="hidden fixed inset-0 z-40 modal-backdrop flex items-end sm:items-center justify-center">
+  <div class="fade-in bg-[var(--paper)] w-full sm:max-w-5xl sm:rounded-3xl rounded-t-3xl max-h-[88vh] flex flex-col shadow-2xl">
+    <div class="p-5 stitch bg-white sm:rounded-t-3xl">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <h3 class="text-xl font-black">CSVプレビュー</h3>
+          <p class="text-xs font-bold text-[var(--ink-soft)] num"><span id="csv-preview-count">0</span>件のデータを出力します</p>
+        </div>
+        <button onclick="closeCSVPreview()" class="btn-press text-2xl font-black px-2 text-[var(--ink-soft)]">×</button>
+      </div>
+      <div class="flex gap-1.5">
+        <button id="csv-tab-all" onclick="setCSVFilter('all')" class="folder-tab active">すべて</button>
+        <button id="csv-tab-8" onclick="setCSVFilter(8)" class="folder-tab">8％対象のみ</button>
+        <button id="csv-tab-10" onclick="setCSVFilter(10)" class="folder-tab">10％対象のみ</button>
+      </div>
+    </div>
+    <div id="csv-preview-table-wrap" class="flex-1 overflow-auto p-4"></div>
+    <div class="p-4 border-t-2 border-[var(--card-border)] bg-white sm:rounded-b-3xl flex gap-3">
+      <button onclick="closeCSVPreview()" class="btn-press flex-1 bg-[var(--paper-dark)] rounded-xl py-3 font-bold">閉じる</button>
+      <button onclick="triggerCSVDownload()" class="btn-press flex-1 bg-[var(--green)] text-white rounded-xl py-3 font-bold">⬇ この内容でダウンロード</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ モーダル：登録データ一覧（確認・編集・削除） ============ -->
+<div id="records-modal" class="hidden fixed inset-0 z-40 modal-backdrop flex items-end sm:items-center justify-center">
+  <div class="fade-in bg-[var(--paper)] w-full sm:max-w-2xl sm:rounded-3xl rounded-t-3xl max-h-[88vh] flex flex-col shadow-2xl">
+    <div class="p-5 stitch bg-white sm:rounded-t-3xl flex items-center justify-between">
+      <h3 class="text-xl font-black">登録データを見る・編集する</h3>
+      <button onclick="closeRecordsModal()" class="btn-press text-2xl font-black px-2 text-[var(--ink-soft)]">×</button>
+    </div>
+    <div id="records-list" class="flex-1 overflow-y-auto p-4 space-y-5"></div>
+  </div>
+</div>
+
+<!-- ============ モーダル：商品別の販売数集計 ============ -->
+<div id="product-summary-modal" class="hidden fixed inset-0 z-40 modal-backdrop flex items-end sm:items-center justify-center">
+  <div class="fade-in bg-[var(--paper)] w-full sm:max-w-lg sm:rounded-3xl rounded-t-3xl max-h-[85vh] flex flex-col shadow-2xl">
+    <div class="p-5 stitch bg-white sm:rounded-t-3xl flex items-center justify-between">
+      <div>
+        <h3 class="text-xl font-black">商品別の販売数</h3>
+        <p class="text-xs font-bold text-[var(--ink-soft)]">現在登録されている全データの合計です</p>
+      </div>
+      <button onclick="closeProductSummaryModal()" class="btn-press text-2xl font-black px-2 text-[var(--ink-soft)]">×</button>
+    </div>
+    <div id="product-summary-list" class="flex-1 overflow-y-auto p-4 space-y-5"></div>
+  </div>
+</div>
+
+
+<!-- ============ モーダル：確認ダイアログ（汎用） ============ -->
+<div id="confirm-modal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-center justify-center px-6">
+  <div class="fade-in bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl">
+    <p id="confirm-message" class="text-lg font-bold mb-6 text-center leading-relaxed"></p>
+    <div class="flex gap-3">
+      <button onclick="closeConfirm()" class="btn-press flex-1 bg-[var(--paper-dark)] rounded-xl py-3 font-bold">キャンセル</button>
+      <button id="confirm-ok-btn" class="btn-press flex-1 bg-[var(--red)] text-white rounded-xl py-3 font-bold">実行する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   マスタデータ
+   ============================================================ */
+const DEFAULT_DEPARTMENTS = ['売店', '生活支援', '事務所'];
+
+const DEFAULT_CUSTOMERS = [
+  { code:'5027', name:'橋元 亮一', department:'売店' },
+  { code:'5135', name:'畠中 廣子', department:'生活支援' },
+  { code:'5048', name:'安藤 道子', department:'生活支援' },
+  { code:'5116', name:'徳留 健治', department:'事務所' },
+];
+
+const DEFAULT_PRODUCTS = [
+  { id:'p1', name:'ポッキー',       price:270, icon:'🍫', taxRate:8 },
+  { id:'p2', name:'かっぱえびせん', price:140, icon:'🍘', taxRate:8 },
+  { id:'p3', name:'チップスター',   price:150, icon:'🥔', taxRate:8 },
+  { id:'p4', name:'お茶',           price:100, icon:'🍵', taxRate:8 },
+];
+
+/* ============================================================
+   状態管理（localStorage 連携）
+   ============================================================ */
+const LS_CUSTOMERS = 'pos_customers_v1';
+const LS_TRANSACTIONS = 'pos_transactions_v1';
+const LS_DEPARTMENTS = 'pos_departments_v1';
+const LS_SESSION = 'pos_session_info_v1';
+const LS_PRODUCTS = 'pos_products_v1';
+const LS_ADMIN_PASSWORD = 'pos_admin_password_v1';
+const LS_DEPT_PASSWORDS = 'pos_dept_passwords_v1';
+const UNASSIGNED = '未設定';
+
+function loadCustomers(){
+  const raw = localStorage.getItem(LS_CUSTOMERS);
+  return raw ? JSON.parse(raw) : DEFAULT_CUSTOMERS.slice();
+}
+function saveCustomers(list){
+  localStorage.setItem(LS_CUSTOMERS, JSON.stringify(list));
+}
+function loadDepartments(){
+  const raw = localStorage.getItem(LS_DEPARTMENTS);
+  return raw ? JSON.parse(raw) : DEFAULT_DEPARTMENTS.slice();
+}
+function saveDepartments(list){
+  localStorage.setItem(LS_DEPARTMENTS, JSON.stringify(list));
+}
+function loadProducts(){
+  const raw = localStorage.getItem(LS_PRODUCTS);
+  return raw ? JSON.parse(raw) : DEFAULT_PRODUCTS.slice();
+}
+function saveProducts(list){
+  localStorage.setItem(LS_PRODUCTS, JSON.stringify(list));
+}
+function loadTransactions(){
+  const raw = localStorage.getItem(LS_TRANSACTIONS);
+  return raw ? JSON.parse(raw) : [];
+}
+function saveTransactions(list){
+  localStorage.setItem(LS_TRANSACTIONS, JSON.stringify(list));
+}
+function todayStr(){
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+function loadSessionInfo(){
+  const raw = localStorage.getItem(LS_SESSION);
+  const parsed = raw ? JSON.parse(raw) : {};
+  return { date: parsed.date || todayStr(), staff: parsed.staff || '' };
+}
+function saveSessionInfo(info){
+  localStorage.setItem(LS_SESSION, JSON.stringify(info));
+}
+function loadAdminPassword(){
+  return localStorage.getItem(LS_ADMIN_PASSWORD) || '';
+}
+function saveAdminPassword(pw){
+  localStorage.setItem(LS_ADMIN_PASSWORD, pw);
+}
+function loadDeptPasswords(){
+  const raw = localStorage.getItem(LS_DEPT_PASSWORDS);
+  return raw ? JSON.parse(raw) : {};
+}
+function saveDeptPasswords(map){
+  localStorage.setItem(LS_DEPT_PASSWORDS, JSON.stringify(map));
+}
+
+let customers = loadCustomers();
+let departments = loadDepartments();
+let products = loadProducts();
+let transactions = loadTransactions();
+let sessionInfo = loadSessionInfo();
+let deptPasswords = loadDeptPasswords();
+let currentDeptFilter = null; // null = すべて
+let currentAuthRole = null; // null=未ログイン | 'admin' | 部署名（ログインするたびに再認証する仕様）
+
+let currentCustomer = null;
+let currentQty = {}; // { 商品id: 数量 }
+let currentEditingIndex = -1;   // 上書き対象となる既存取引のインデックス（新規なら-1）
+let currentEditingDate = null;  // 編集対象の入力日（新規登録時はnull → 確定時に入力情報の日付を使う）
+let currentOrphanItems = [];    // 商品マスタから削除済みだが、その日の既存データに残っている明細
+
+/* ============================================================
+   入力情報（日付・入力者）：記入形式
+   ============================================================ */
+function initSessionInputs(){
+  const dateInput = document.getElementById('session-date');
+  const staffInput = document.getElementById('session-staff');
+  dateInput.value = sessionInfo.date;
+  staffInput.value = sessionInfo.staff;
+
+  dateInput.onchange = ()=>{
+    sessionInfo.date = dateInput.value || todayStr();
+    saveSessionInfo(sessionInfo);
+    updateOrderSessionLabel();
+    renderCustomerGrid();
+  };
+  staffInput.onchange = ()=>{
+    sessionInfo.staff = staffInput.value.trim();
+    saveSessionInfo(sessionInfo);
+    updateOrderSessionLabel();
+  };
+}
+
+function updateOrderSessionLabel(){
+  const dateEl = document.getElementById('order-session-date');
+  const staffEl = document.getElementById('order-session-staff');
+  if(dateEl) dateEl.textContent = sessionInfo.date || '未入力';
+  if(staffEl) staffEl.textContent = sessionInfo.staff || '未入力';
+}
+
+/* ============================================================
+   画面①：利用者選択・ダッシュボード
+   ============================================================ */
+function renderDashboard(){
+  const visible = transactions.filter(isTransactionVisible);
+  const totalSales = visible.reduce((s,t)=>s+t.total,0);
+  document.getElementById('total-sales').textContent = totalSales.toLocaleString();
+  document.getElementById('total-count').textContent = visible.length.toLocaleString();
+}
+
+function renderDeptTabs(){
+  const wrap = document.getElementById('dept-tabs');
+  wrap.innerHTML = '';
+  const hasUnassigned = customers.some(c => !departments.includes(c.department));
+  const tabs = ['ALL', ...departments, ...(hasUnassigned ? [UNASSIGNED] : [])];
+
+  tabs.forEach(t=>{
+    const isAll = t === 'ALL';
+    const label = isAll ? 'すべて' : t;
+    const isActive = isAll ? currentDeptFilter === null : currentDeptFilter === t;
+    const btn = document.createElement('button');
+    btn.className = 'folder-tab' + (isActive ? ' active' : '');
+    btn.textContent = label;
+    btn.onclick = ()=>{ currentDeptFilter = isAll ? null : t; renderCustomerGrid(); };
+    wrap.appendChild(btn);
+  });
+}
+
+function departmentOf(customer){
+  return departments.includes(customer.department) ? customer.department : UNASSIGNED;
+}
+
+function renderCustomerGrid(){
+  renderDeptTabs();
+  const container = document.getElementById('customer-sections');
+  container.innerHTML = '';
+
+  const allDeptKeys = [...departments, UNASSIGNED];
+  const isAdmin = currentAuthRole === 'admin' || !currentAuthRole;
+  const visibleDepts = !isAdmin ? [currentAuthRole] : (currentDeptFilter === null ? allDeptKeys : [currentDeptFilter]);
+
+  let anyRendered = false;
+  visibleDepts.forEach(dept=>{
+    const custs = customers.filter(c => departmentOf(c) === dept);
+    if(custs.length === 0) return;
+    anyRendered = true;
+
+    const section = document.createElement('section');
+    const header = document.createElement('div');
+    header.className = 'folder-tab active';
+    header.textContent = `🗂 ${dept}（${custs.length}名）`;
+    const body = document.createElement('div');
+    body.className = 'folder-section grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mt-0';
+
+    custs.forEach(c=>{
+      const card = document.createElement('button');
+      card.className = 'user-card btn-press p-5 text-left';
+      card.onclick = ()=>openOrderScreen(c);
+      const existingIdx = findTransactionIndex(c.code, sessionInfo.date || todayStr());
+      const badge = existingIdx !== -1
+        ? `<p class="mt-2 inline-block bg-[var(--green)] text-white text-xs font-bold rounded-full px-3 py-1 num">✅ ${transactions[existingIdx].total.toLocaleString()}円 購入済み</p>`
+        : '';
+      card.innerHTML = `
+        <p class="text-xs font-bold text-[var(--ink-soft)] num">${c.code}</p>
+        <p class="text-lg md:text-xl font-black mt-1 leading-snug">${escapeHtml(c.name)}</p>
+        ${badge}
+      `;
+      body.appendChild(card);
+    });
+
+    section.appendChild(header);
+    section.appendChild(body);
+    container.appendChild(section);
+  });
+
+  if(!anyRendered){
+    container.innerHTML = `<p class="text-center text-[var(--ink-soft)] font-bold py-10">この部署に利用者が登録されていません</p>`;
+  }
+}
+
+/* ============================================================
+   画面②：商品入力
+   ============================================================ */
+function findTransactionIndex(customerCode, date){
+  return transactions.findIndex(t => t.code === customerCode && t.entryDate === date);
+}
+
+function openOrderScreen(customer, dateOverride){
+  const targetDate = dateOverride || sessionInfo.date || todayStr();
+
+  currentCustomer = customer;
+  currentQty = {};
+  currentOrphanItems = [];
+  currentEditingDate = targetDate;
+  products.forEach(p => currentQty[p.id] = 0);
+
+  currentEditingIndex = findTransactionIndex(customer.code, targetDate);
+  if(currentEditingIndex !== -1){
+    const existing = transactions[currentEditingIndex];
+    (existing.items || []).forEach(it=>{
+      if(currentQty.hasOwnProperty(it.productId)){
+        currentQty[it.productId] = it.qty;
+      } else {
+        // 商品マスタから削除済みの商品：数量は編集できないが金額は保持する
+        currentOrphanItems.push(it);
+      }
+    });
+  }
+
+  document.getElementById('order-code').textContent = customer.code;
+  document.getElementById('order-name').textContent = customer.name;
+  updateOrderSessionLabel();
+
+  updateConfirmedSummary();
+  updateOrderButtons();
+
+  renderProductGrid();
+  updateOrderTotal();
+
+  document.getElementById('screen-customers').classList.add('hidden');
+  document.getElementById('screen-order').classList.remove('hidden');
+}
+
+function backToCustomers(){
+  document.getElementById('screen-order').classList.add('hidden');
+  document.getElementById('screen-customers').classList.remove('hidden');
+  currentCustomer = null;
+  currentEditingIndex = -1;
+  currentEditingDate = null;
+  currentOrphanItems = [];
+  renderCustomerGrid();
+}
+
+function renderProductGrid(){
+  const container = document.getElementById('product-grid');
+  container.innerHTML = '';
+
+  const groups = [
+    { rate:8,  label:'🍬 軽減税率 8％対象（飲食料品など）' },
+    { rate:10, label:'🍬 標準税率 10％対象' },
+  ];
+
+  let anyRendered = false;
+  groups.forEach(g=>{
+    const items = products.filter(p => p.taxRate === g.rate);
+    if(items.length === 0) return;
+    anyRendered = true;
+
+    const section = document.createElement('section');
+    const header = document.createElement('div');
+    header.className = 'folder-tab active';
+    header.textContent = g.label;
+    const body = document.createElement('div');
+    body.className = 'folder-section grid grid-cols-2 md:grid-cols-4 gap-4';
+
+    items.forEach(p=>{
+      const card = document.createElement('div');
+      card.className = 'snack-card p-4 flex flex-col items-center text-center';
+      card.innerHTML = `
+        <div class="text-4xl mb-1">${p.icon || '🍭'}</div>
+        <p class="font-black text-base leading-tight">${escapeHtml(p.name)}</p>
+        <p class="text-xs text-[var(--ink-soft)] font-bold mb-3 num">${p.price}円（税${p.taxRate}％）</p>
+        <div class="flex items-center gap-3">
+          <button class="qty-btn bg-[var(--paper-dark)] text-[var(--ink)]" onclick="changeQty('${p.id}',-1)">−</button>
+          <span id="qty-${p.id}" class="text-2xl font-black w-8 text-center num">${currentQty[p.id] || 0}</span>
+          <button class="qty-btn bg-[var(--orange)] text-white" onclick="changeQty('${p.id}',1)">＋</button>
+        </div>
+      `;
+      body.appendChild(card);
+    });
+
+    section.appendChild(header);
+    section.appendChild(body);
+    container.appendChild(section);
+  });
+
+  if(!anyRendered){
+    container.innerHTML = `<p class="text-center text-[var(--ink-soft)] font-bold py-10">商品が登録されていません</p>`;
+  }
+}
+
+function changeQty(id, delta){
+  const next = (currentQty[id] || 0) + delta;
+  currentQty[id] = Math.max(0, next);
+  document.getElementById(`qty-${id}`).textContent = currentQty[id];
+  updateOrderTotal();
+}
+
+function updateOrderTotal(){
+  let total = 0, tax8 = 0, tax10 = 0;
+  products.forEach(p=>{
+    const qty = currentQty[p.id] || 0;
+    const line = qty * p.price;
+    total += line;
+    if(p.taxRate === 8) tax8 += line; else tax10 += line;
+  });
+  currentOrphanItems.forEach(it=>{
+    total += it.lineTotal;
+    if(it.taxRate === 8) tax8 += it.lineTotal; else tax10 += it.lineTotal;
+  });
+  document.getElementById('order-total').textContent = total.toLocaleString();
+  document.getElementById('order-tax8').textContent = tax8.toLocaleString();
+  document.getElementById('order-tax10').textContent = tax10.toLocaleString();
+  return total;
+}
+
+function updateConfirmedSummary(){
+  const note = document.getElementById('order-editing-note');
+  if(currentEditingIndex === -1){
+    note.classList.add('hidden');
+    return;
+  }
+  const record = transactions[currentEditingIndex];
+  note.classList.remove('hidden');
+  note.innerHTML = `📝 登録済み（${escapeHtml(record.entryDate)}）：<span class="num">${escapeHtml(itemsSummaryText(record.items))}</span>　合計 <span class="num">${record.total.toLocaleString()}</span>円<br>数量を変えて「変更する」を押すと、この内容が上書きされます`;
+}
+
+function updateOrderButtons(){
+  const confirmBtn = document.getElementById('btn-confirm-order');
+  const updateBtn = document.getElementById('btn-update-order');
+  const hasExisting = currentEditingIndex !== -1;
+  confirmBtn.classList.toggle('hidden', hasExisting);
+  updateBtn.classList.toggle('hidden', !hasExisting);
+}
+
+function saveOrder(){
+  const total = updateOrderTotal();
+  if(total <= 0){
+    showToast('数量が0円です。商品を選択してください。', '⚠️');
+    return;
+  }
+  if(!sessionInfo.staff){
+    showToast('「入力した人の名前」を利用者選択画面で入力してください', '⚠️');
+    return;
+  }
+
+  let tax8Total = 0, tax10Total = 0;
+  const items = [];
+  products.forEach(p=>{
+    const qty = currentQty[p.id] || 0;
+    if(qty <= 0) return;
+    const lineTotal = qty * p.price;
+    if(p.taxRate === 8) tax8Total += lineTotal; else tax10Total += lineTotal;
+    items.push({ productId:p.id, name:p.name, qty, unitPrice:p.price, taxRate:p.taxRate, lineTotal });
+  });
+  // 商品マスタから削除済みだが、その日の既存データにあった分はそのまま引き継ぐ
+  currentOrphanItems.forEach(it=>{
+    if(it.taxRate === 8) tax8Total += it.lineTotal; else tax10Total += it.lineTotal;
+    items.push(it);
+  });
+
+  const record = {
+    code: currentCustomer.code,
+    name: currentCustomer.name,
+    items: items,
+    total: total,
+    tax8Total: tax8Total,
+    tax10Total: tax10Total,
+    timestamp: new Date().toISOString(),
+    entryDate: currentEditingDate || sessionInfo.date || todayStr(),
+    enteredBy: sessionInfo.staff,
+  };
+
+  const wasNew = currentEditingIndex === -1;
+  if(!wasNew){
+    transactions[currentEditingIndex] = record; // 同日・同利用者の既存データを上書き
+  } else {
+    transactions.push(record);
+    currentEditingIndex = transactions.length - 1; // 以降は「変更」ボタンで上書きできるようにする
+  }
+  saveTransactions(transactions);
+
+  // 押したボタン（数量）はそのまま残す。画面は移動せず、この場で確認・続けて変更できるようにする
+  showToast(wasNew ? `${currentCustomer.name} さんの購入を登録しました` : `${currentCustomer.name} さんの内容を変更しました`, '✅');
+  renderDashboard();
+  renderCustomerGrid();
+  updateOrderButtons();
+  updateConfirmedSummary();
+}
+
+/* ============================================================
+   CSVエクスポート（プレビュー → BOM付きUTF-8でダウンロード）
+   ============================================================ */
+let pendingCSVExport = null;
+let currentCSVFilter = 'all'; // 'all' | 8 | 10
+
+function buildCSVExportData(filter){
+  // 商品列は「現在の商品マスタの並び」を基本にし、
+  // マスタから削除済みだが過去データに残る商品名があれば末尾に追加する（税率でも絞り込む）
+  const relevantProducts = filter === 'all' ? products : products.filter(p => p.taxRate === filter);
+  const colNames = relevantProducts.map(p => p.name);
+  transactions.forEach(t=>{
+    (t.items || []).forEach(it=>{
+      if(filter !== 'all' && it.taxRate !== filter) return;
+      if(!colNames.includes(it.name)) colNames.push(it.name);
+    });
+  });
+
+  let header;
+  if(filter === 'all'){
+    header = ['入力日','得意先コード','氏名','00000008','00000010','数量','売上金額', ...colNames, '入力者'];
+  } else if(filter === 8){
+    header = ['入力日','得意先コード','氏名','00000008','数量','売上金額', ...colNames, '入力者'];
+  } else {
+    header = ['入力日','得意先コード','氏名','00000010','数量','売上金額', ...colNames, '入力者'];
+  }
+
+  // 部署の並び順（マスタの並び＋未設定）でファイリングしてから出力する
+  const deptOrder = [...departments, UNASSIGNED];
+  const customerDeptMap = {};
+  customers.forEach(c => { customerDeptMap[c.code] = departmentOf(c); });
+
+  const sortedTransactions = transactions.filter(isTransactionVisible).sort((a,b)=>{
+    const da = deptOrder.indexOf(customerDeptMap[a.code] ?? UNASSIGNED);
+    const db = deptOrder.indexOf(customerDeptMap[b.code] ?? UNASSIGNED);
+    if(da !== db) return da - db;
+    return a.code.localeCompare(b.code);
+  });
+
+  let dataRows = sortedTransactions.map(t=>{
+    const row = [t.entryDate || '', t.code, t.name];
+    if(filter === 'all'){
+      row.push('00000008');
+      row.push('00000010');
+      row.push(1);
+      row.push(t.total);
+    } else if(filter === 8){
+      row.push('00000008');
+      row.push(1);
+      row.push(t.tax8Total || 0); // このファイルの売上金額は8%対象分のみ
+    } else {
+      row.push('00000010');
+      row.push(1);
+      row.push(t.tax10Total || 0); // このファイルの売上金額は10%対象分のみ
+    }
+    colNames.forEach(colName=>{
+      const item = (t.items || []).find(it => it.name === colName && (filter === 'all' || it.taxRate === filter));
+      row.push(item ? item.qty : 0);
+    });
+    row.push(t.enteredBy || '');
+    return row;
+  });
+
+  if(filter !== 'all'){
+    // 対象税率の購入が無い日は行ごと除外する
+    const amountColIdx = 5; // [入力日,得意先コード,氏名,コード,数量,売上金額]
+    dataRows = dataRows.filter(row => row[amountColIdx] > 0);
+  }
+
+  return { header, dataRows };
+}
+
+function setCSVFilter(filter){
+  currentCSVFilter = filter;
+  ['all', 8, 10].forEach(f=>{
+    const tab = document.getElementById(f === 'all' ? 'csv-tab-all' : `csv-tab-${f}`);
+    tab.classList.toggle('active', f === filter);
+  });
+  pendingCSVExport = buildCSVExportData(filter);
+  renderCSVPreviewTable();
+}
+
+function openCSVPreview(){
+  setCSVFilter('all');
+  document.getElementById('csv-preview-modal').classList.remove('hidden');
+}
+
+function closeCSVPreview(){
+  document.getElementById('csv-preview-modal').classList.add('hidden');
+}
+
+function renderCSVPreviewTable(){
+  const { header, dataRows } = pendingCSVExport;
+  const wrap = document.getElementById('csv-preview-table-wrap');
+  document.getElementById('csv-preview-count').textContent = dataRows.length;
+
+  if(dataRows.length === 0){
+    wrap.innerHTML = `<p class="text-center text-[var(--ink-soft)] font-bold py-10">出力するデータがありません</p>`;
+    return;
+  }
+
+  let html = '<table><thead><tr>';
+  header.forEach(h => { html += `<th>${escapeHtml(h)}</th>`; });
+  html += '</tr></thead><tbody>';
+  dataRows.forEach(row=>{
+    html += '<tr>';
+    row.forEach(cell => { html += `<td>${escapeHtml(String(cell))}</td>`; });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function triggerCSVDownload(){
+  if(!pendingCSVExport || pendingCSVExport.dataRows.length === 0){
+    showToast('出力するデータがありません', '⚠️');
+    return;
+  }
+  const rows = [pendingCSVExport.header, ...pendingCSVExport.dataRows];
+  const csvBody = rows.map(r => r.map(csvEscape).join(',')).join('\r\n');
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + csvBody], { type:'text/csv;charset=utf-8;' });
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const today = new Date();
+  const ymd = `${today.getFullYear()}${pad(today.getMonth()+1)}${pad(today.getDate())}`;
+  const suffix = currentCSVFilter === 'all' ? '' : (currentCSVFilter === 8 ? '_8%対象' : '_10%対象');
+  a.href = url;
+  a.download = `売店お菓子${suffix}_${ymd}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  closeCSVPreview();
+  showToast('CSVをダウンロードしました', '⬇');
+}
+
+/* ============================================================
+   登録データ一覧（確定後も確認・編集・削除できるようにする）
+   ============================================================ */
+function itemsSummaryText(items){
+  if(!items || items.length === 0) return '（購入した商品はありません）';
+  return items.map(it => `${it.name}×${it.qty}`).join('、');
+}
+
+function groupTransactionIndicesByDate(){
+  const map = {};
+  transactions.forEach((t, idx)=>{
+    if(!isTransactionVisible(t)) return; // 部署ログインは自分の部署のデータのみ
+    const d = t.entryDate || UNASSIGNED;
+    if(!map[d]) map[d] = [];
+    map[d].push(idx);
+  });
+  return map;
+}
+
+function openRecordsModal(){
+  renderRecordsList();
+  document.getElementById('records-modal').classList.remove('hidden');
+}
+function closeRecordsModal(){
+  document.getElementById('records-modal').classList.add('hidden');
+}
+
+function renderRecordsList(){
+  const wrap = document.getElementById('records-list');
+  wrap.innerHTML = '';
+
+  if(transactions.length === 0){
+    wrap.innerHTML = `<p class="text-center text-[var(--ink-soft)] font-bold py-10">登録されているデータはありません</p>`;
+    return;
+  }
+
+  const grouped = groupTransactionIndicesByDate();
+  const dates = Object.keys(grouped).sort((a,b)=> b.localeCompare(a)); // 新しい日付から表示
+
+  dates.forEach(date=>{
+    const section = document.createElement('section');
+    const header = document.createElement('div');
+    header.className = 'folder-tab active';
+    header.textContent = `📅 ${date}（${grouped[date].length}件）`;
+    const body = document.createElement('div');
+    body.className = 'folder-section space-y-3';
+
+    grouped[date].forEach(idx=>{
+      const t = transactions[idx];
+      const row = document.createElement('div');
+      row.className = 'bg-white border-2 border-[var(--card-border)] rounded-xl p-3';
+      row.innerHTML = `
+        <div class="flex justify-between items-start gap-3">
+          <div class="min-w-0">
+            <p class="text-xs font-bold text-[var(--ink-soft)] num">得意先コード：${escapeHtml(t.code)}</p>
+            <p class="font-black text-base truncate">${escapeHtml(t.name)}</p>
+            <p class="text-xs text-[var(--ink-soft)] mt-1 leading-relaxed">${escapeHtml(itemsSummaryText(t.items))}</p>
+            <p class="text-xs text-[var(--ink-soft)] mt-1">入力者：${escapeHtml(t.enteredBy || '未入力')}</p>
+          </div>
+          <div class="text-right shrink-0">
+            <p class="text-xs font-bold text-[var(--ink-soft)]">合計</p>
+            <p class="font-black text-lg num">${t.total.toLocaleString()}円</p>
+          </div>
+        </div>
+        <div class="flex gap-2 mt-3">
+          <button class="btn-press flex-1 bg-[var(--ink)] text-white rounded-lg py-2.5 font-bold text-xs" onclick="editRecordFromList(${idx})">✏️ 編集する</button>
+          <button class="btn-press bg-[var(--paper-dark)] rounded-lg px-4 font-bold text-xs text-[var(--red)]" onclick="deleteRecord(${idx})">🗑 削除</button>
+        </div>
+      `;
+      body.appendChild(row);
+    });
+
+    section.appendChild(header);
+    section.appendChild(body);
+    wrap.appendChild(section);
+  });
+}
+
+function editRecordFromList(idx){
+  const t = transactions[idx];
+  if(!isTransactionVisible(t)){
+    showToast('他部署のデータは編集できません', '⚠️');
+    return;
+  }
+  closeRecordsModal();
+  let customer = customers.find(c => c.code === t.code);
+  if(!customer){
+    // マスタから削除済みの利用者でも、そのデータを編集できるようにする
+    customer = { code:t.code, name:t.name, department: currentAuthRole === 'admin' || !currentAuthRole ? UNASSIGNED : currentAuthRole };
+  }
+  openOrderScreen(customer, t.entryDate);
+}
+
+function deleteRecord(idx){
+  const t = transactions[idx];
+  if(!isTransactionVisible(t)){
+    showToast('他部署のデータは削除できません', '⚠️');
+    return;
+  }
+  openConfirm(`${t.name} さん（${t.entryDate}）の登録データを削除します。\nこの操作は元に戻せません。よろしいですか？`, ()=>{
+    transactions.splice(idx, 1);
+    saveTransactions(transactions);
+    renderDashboard();
+    renderCustomerGrid();
+    renderRecordsList();
+    showToast('登録データを削除しました', '🗑');
+  });
+}
+
+/* ============================================================
+   商品別の販売数集計
+   ============================================================ */
+function computeProductSummary(){
+  // 現在の商品マスタを基本にし、削除済みだが過去データに残る商品も追加する
+  const summary = {}; // name -> { qty, amount, taxRate }
+  products.forEach(p=>{
+    summary[p.name] = { qty:0, amount:0, taxRate:p.taxRate };
+  });
+  transactions.filter(isTransactionVisible).forEach(t=>{
+    (t.items || []).forEach(it=>{
+      if(!summary[it.name]){
+        summary[it.name] = { qty:0, amount:0, taxRate:it.taxRate };
+      }
+      summary[it.name].qty += it.qty;
+      summary[it.name].amount += it.lineTotal;
+    });
+  });
+  return summary;
+}
+
+function openProductSummaryModal(){
+  renderProductSummary();
+  document.getElementById('product-summary-modal').classList.remove('hidden');
+}
+function closeProductSummaryModal(){
+  document.getElementById('product-summary-modal').classList.add('hidden');
+}
+
+function renderProductSummary(){
+  const wrap = document.getElementById('product-summary-list');
+  wrap.innerHTML = '';
+  const summary = computeProductSummary();
+  const names = Object.keys(summary);
+
+  if(names.length === 0){
+    wrap.innerHTML = `<p class="text-center text-[var(--ink-soft)] font-bold py-10">商品が登録されていません</p>`;
+    return;
+  }
+
+  const groups = [
+    { rate:8,  label:'🍬 軽減税率 8％対象' },
+    { rate:10, label:'🍬 標準税率 10％対象' },
+  ];
+
+  let anyRendered = false;
+  groups.forEach(g=>{
+    const groupNames = names.filter(n => summary[n].taxRate === g.rate);
+    if(groupNames.length === 0) return;
+    anyRendered = true;
+
+    // 販売数の多い順に並べる
+    groupNames.sort((a,b)=> summary[b].qty - summary[a].qty);
+
+    const section = document.createElement('section');
+    const header = document.createElement('div');
+    header.className = 'folder-tab active';
+    header.textContent = g.label;
+    const body = document.createElement('div');
+    body.className = 'folder-section space-y-2';
+
+    groupNames.forEach(name=>{
+      const s = summary[name];
+      const row = document.createElement('div');
+      row.className = 'flex items-center justify-between bg-white border-2 border-[var(--card-border)] rounded-xl px-4 py-3';
+      row.innerHTML = `
+        <p class="font-black text-sm">${escapeHtml(name)}</p>
+        <div class="text-right">
+          <p class="text-xl font-black num">${s.qty.toLocaleString()}<span class="text-xs font-bold">個</span></p>
+          <p class="text-xs font-bold text-[var(--ink-soft)] num">${s.amount.toLocaleString()}円</p>
+        </div>
+      `;
+      body.appendChild(row);
+    });
+
+    section.appendChild(header);
+    section.appendChild(body);
+    wrap.appendChild(section);
+  });
+
+  if(!anyRendered){
+    wrap.innerHTML = `<p class="text-center text-[var(--ink-soft)] font-bold py-10">販売実績がありません</p>`;
+  }
+}
+
+function csvEscape(value){
+  const s = String(value);
+  if(/[",\r\n]/.test(s)){
+    return `"${s.replace(/"/g,'""')}"`;
+  }
+  return s;
+}
+function pad(n){ return n.toString().padStart(2,'0'); }
+
+/* ============================================================
+   利用者マスタ編集モーダル
+   ============================================================ */
+function openMasterModal(){
+  populateDepartmentSelect('new-department');
+  renderMasterList();
+  const isAdmin = currentAuthRole === 'admin' || !currentAuthRole;
+  document.getElementById('new-code').classList.toggle('hidden', !isAdmin);
+  document.getElementById('new-code-auto-note').classList.toggle('hidden', isAdmin);
+  document.getElementById('bulk-add-hint').textContent = isAdmin
+    ? '例：5200:山田 太郎:売店,5201:鈴木 花子:事務所'
+    : '例：山田 太郎,鈴木 花子（コードは自動で発行されます）';
+  document.getElementById('master-modal').classList.remove('hidden');
+}
+function closeMasterModal(){
+  document.getElementById('master-modal').classList.add('hidden');
+  document.getElementById('new-code').value = '';
+  document.getElementById('new-name').value = '';
+  document.getElementById('bulk-add').value = '';
+}
+
+function generateCustomerCode(){
+  let maxCode = 0;
+  customers.forEach(c=>{
+    const n = parseInt(c.code, 10);
+    if(!isNaN(n) && n > maxCode) maxCode = n;
+  });
+  let next = maxCode + 1;
+  while(customers.some(c => c.code === String(next))) next++;
+  return String(next);
+}
+
+function populateDepartmentSelect(selectId, selected){
+  const select = document.getElementById(selectId);
+  const isAdmin = currentAuthRole === 'admin' || !currentAuthRole;
+  if(isAdmin){
+    select.innerHTML = departments.map(d =>
+      `<option value="${escapeHtml(d)}" ${d===selected?'selected':''}>${escapeHtml(d)}</option>`
+    ).join('');
+    select.disabled = false;
+  } else {
+    // 部署ログインは自分の部署以外に登録・変更できないようにする
+    select.innerHTML = `<option value="${escapeHtml(currentAuthRole)}" selected>${escapeHtml(currentAuthRole)}</option>`;
+    select.disabled = true;
+  }
+}
+
+function renderMasterList(){
+  const list = document.getElementById('master-list');
+  list.innerHTML = '';
+  const isAdmin = currentAuthRole === 'admin' || !currentAuthRole;
+
+  customers.forEach((c, idx)=>{
+    if(!isCustomerVisible(c)) return; // 部署ログインは自分の部署の利用者しか編集できない
+
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-2 bg-white border-2 border-[var(--card-border)] rounded-xl px-3 py-2';
+    row.innerHTML = `
+      <input id="code-input-${idx}" type="text" value="${escapeHtml(c.code)}" class="w-16 text-xs font-bold text-[var(--ink-soft)] num border-2 border-[var(--card-border)] rounded-lg px-2 py-2">
+      <input id="name-input-${idx}" type="text" value="${escapeHtml(c.name)}" class="flex-1 min-w-0 font-bold text-sm border-2 border-[var(--card-border)] rounded-lg px-2 py-2">
+      <select id="dept-select-${idx}" class="text-xs font-bold border-2 border-[var(--card-border)] rounded-lg px-2 py-2"></select>
+      <button class="btn-press text-[var(--red)] font-black text-lg px-2" onclick="removeCustomer(${idx})">×</button>
+    `;
+    list.appendChild(row);
+
+    const codeInput = document.getElementById(`code-input-${idx}`);
+    if(isAdmin){
+      codeInput.onchange = ()=>{
+        const val = codeInput.value.trim();
+        if(!val){ showToast('コードを入力してください', '⚠️'); codeInput.value = c.code; return; }
+        customers[idx].code = val;
+        saveCustomers(customers);
+        renderCustomerGrid();
+      };
+    } else {
+      codeInput.disabled = true; // 部署ログインはコードを変更できない
+    }
+
+    const nameInput = document.getElementById(`name-input-${idx}`);
+    nameInput.onchange = ()=>{
+      const val = nameInput.value.trim();
+      if(!val){ showToast('氏名を入力してください', '⚠️'); nameInput.value = c.name; return; }
+      customers[idx].name = val;
+      saveCustomers(customers);
+      renderCustomerGrid();
+    };
+
+    const sel = document.getElementById(`dept-select-${idx}`);
+    if(isAdmin){
+      sel.innerHTML = departments.map(d =>
+        `<option value="${escapeHtml(d)}" ${departmentOf(c)===d?'selected':''}>${escapeHtml(d)}</option>`
+      ).join('');
+      sel.disabled = false;
+      sel.onchange = ()=>{ customers[idx].department = sel.value; saveCustomers(customers); renderCustomerGrid(); };
+    } else {
+      // 部署ログインは他部署へ移せないよう固定表示にする
+      sel.innerHTML = `<option value="${escapeHtml(currentAuthRole)}" selected>${escapeHtml(currentAuthRole)}</option>`;
+      sel.disabled = true;
+    }
+  });
+}
+
+function addCustomerSingle(){
+  const name = document.getElementById('new-name').value.trim();
+  const isAdmin = currentAuthRole === 'admin' || !currentAuthRole;
+  const department = isAdmin ? (document.getElementById('new-department').value || UNASSIGNED) : currentAuthRole;
+
+  if(!name){
+    showToast('氏名を入力してください', '⚠️');
+    return;
+  }
+
+  let code;
+  if(isAdmin){
+    code = document.getElementById('new-code').value.trim();
+    if(!code){
+      showToast('コードを入力してください', '⚠️');
+      return;
+    }
+  } else {
+    code = generateCustomerCode(); // 部署ログインはコードを自動発行する
+  }
+
+  customers.push({ code, name, department });
+  saveCustomers(customers);
+  renderMasterList();
+  renderCustomerGrid();
+  document.getElementById('new-code').value = '';
+  document.getElementById('new-name').value = '';
+  showToast(`利用者を追加しました（コード：${code}）`, '✅');
+}
+
+function addCustomerBulk(){
+  const raw = document.getElementById('bulk-add').value.trim();
+  if(!raw) return;
+  const isAdmin = currentAuthRole === 'admin' || !currentAuthRole;
+  const entries = raw.split(',').map(s=>s.trim()).filter(Boolean);
+  let added = 0;
+
+  if(isAdmin){
+    entries.forEach(entry=>{
+      const [code, name, department] = entry.split(':').map(s=>s && s.trim());
+      if(code && name){
+        customers.push({ code, name, department: department || UNASSIGNED });
+        added++;
+      }
+    });
+  } else {
+    // 部署ログインは名前だけを受け付け、コードは自動発行する
+    entries.forEach(entry=>{
+      const name = entry.split(':')[0].trim(); // コードが混ざっていても無視して氏名だけ使う
+      if(name){
+        customers.push({ code: generateCustomerCode(), name, department: currentAuthRole });
+        added++;
+      }
+    });
+  }
+
+  if(added > 0){
+    saveCustomers(customers);
+    renderMasterList();
+    renderCustomerGrid();
+    document.getElementById('bulk-add').value = '';
+    showToast(`${added}件の利用者を追加しました`, '✅');
+  } else {
+    showToast(isAdmin ? '形式が正しくありません（例：5200:山田 太郎:売店）' : '氏名を入力してください（例：山田 太郎,鈴木 花子）', '⚠️');
+  }
+}
+
+function removeCustomer(idx){
+  if(!isCustomerVisible(customers[idx])){
+    showToast('他部署の利用者は削除できません', '⚠️');
+    return;
+  }
+  customers.splice(idx,1);
+  saveCustomers(customers);
+  renderMasterList();
+  renderCustomerGrid();
+}
+
+/* ============================================================
+   部署の管理モーダル
+   ============================================================ */
+function openDeptModal(){
+  renderDeptList();
+  document.getElementById('dept-modal').classList.remove('hidden');
+}
+function closeDeptModal(){
+  document.getElementById('dept-modal').classList.add('hidden');
+  document.getElementById('new-dept-name').value = '';
+}
+
+function renderDeptList(){
+  const list = document.getElementById('dept-list');
+  list.innerHTML = '';
+  departments.forEach((d, idx)=>{
+    const count = customers.filter(c => departmentOf(c) === d).length;
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-2 bg-white border-2 border-[var(--card-border)] rounded-xl px-3 py-2 flex-wrap';
+    row.innerHTML = `
+      <input id="dept-input-${idx}" type="text" value="${escapeHtml(d)}" class="flex-1 min-w-0 font-bold text-sm border-2 border-[var(--card-border)] rounded-lg px-2 py-2">
+      <span class="text-xs font-bold text-[var(--ink-soft)] num shrink-0">${count}名</span>
+      <button class="btn-press text-[var(--red)] font-black text-lg px-2" onclick="removeDepartment(${idx})">×</button>
+      <input id="dept-pw-${idx}" type="text" value="${escapeHtml(deptPasswords[d] || '')}" placeholder="ログイン用パスワード" class="w-full text-xs font-bold border-2 border-[var(--card-border)] rounded-lg px-2 py-2 num">
+    `;
+    list.appendChild(row);
+
+    const input = document.getElementById(`dept-input-${idx}`);
+    input.onchange = ()=>{
+      const newName = input.value.trim();
+      const oldName = departments[idx];
+      if(!newName){
+        showToast('部署名を入力してください', '⚠️');
+        input.value = oldName;
+        return;
+      }
+      if(newName === oldName) return;
+      if(departments.includes(newName)){
+        showToast('同じ名前の部署がすでにあります', '⚠️');
+        input.value = oldName;
+        return;
+      }
+      departments[idx] = newName;
+      customers.forEach(c => { if(c.department === oldName) c.department = newName; });
+      if(currentDeptFilter === oldName) currentDeptFilter = newName;
+      if(deptPasswords[oldName] !== undefined){
+        deptPasswords[newName] = deptPasswords[oldName];
+        delete deptPasswords[oldName];
+        saveDeptPasswords(deptPasswords);
+      }
+      saveDepartments(departments);
+      saveCustomers(customers);
+      renderDeptList();
+      renderCustomerGrid();
+      showToast('部署名を変更しました', '✅');
+    };
+
+    const pwInput = document.getElementById(`dept-pw-${idx}`);
+    pwInput.onchange = ()=>{
+      const pw = pwInput.value.trim();
+      if(pw){
+        deptPasswords[d] = pw;
+      } else {
+        delete deptPasswords[d];
+      }
+      saveDeptPasswords(deptPasswords);
+      showToast('部署のパスワードを更新しました', '✅');
+    };
+  });
+}
+
+function addDepartment(){
+  const input = document.getElementById('new-dept-name');
+  const name = input.value.trim();
+  if(!name){
+    showToast('部署名を入力してください', '⚠️');
+    return;
+  }
+  if(departments.includes(name)){
+    showToast('同じ名前の部署がすでにあります', '⚠️');
+    return;
+  }
+  departments.push(name);
+  saveDepartments(departments);
+  input.value = '';
+  renderDeptList();
+  renderCustomerGrid();
+  showToast('部署を追加しました', '✅');
+}
+
+function removeDepartment(idx){
+  const name = departments[idx];
+  openConfirm(`部署「${name}」を削除します。\nこの部署の利用者は「未設定」に移動します。よろしいですか？`, ()=>{
+    departments.splice(idx,1);
+    saveDepartments(departments);
+    if(currentDeptFilter === name) currentDeptFilter = null;
+    if(deptPasswords[name] !== undefined){
+      delete deptPasswords[name];
+      saveDeptPasswords(deptPasswords);
+    }
+    renderDeptList();
+    renderCustomerGrid();
+    showToast('部署を削除しました', '🗑');
+  });
+}
+
+/* ============================================================
+   商品マスタ編集モーダル
+   ============================================================ */
+function openProductModal(){
+  renderProductList();
+  document.getElementById('product-modal').classList.remove('hidden');
+}
+function closeProductModal(){
+  document.getElementById('product-modal').classList.add('hidden');
+  document.getElementById('new-product-name').value = '';
+  document.getElementById('new-product-price').value = '';
+  document.getElementById('new-product-tax').value = '8';
+}
+
+function renderProductList(){
+  const list = document.getElementById('product-list');
+  list.innerHTML = '';
+  products.forEach((p, idx)=>{
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-2 bg-white border-2 border-[var(--card-border)] rounded-xl px-3 py-2';
+    row.innerHTML = `
+      <input id="prod-name-${idx}" type="text" value="${escapeHtml(p.name)}" class="flex-1 min-w-0 font-bold text-sm border-2 border-[var(--card-border)] rounded-lg px-2 py-2">
+      <input id="prod-price-${idx}" type="number" min="0" step="1" value="${p.price}" class="w-20 font-bold text-sm num border-2 border-[var(--card-border)] rounded-lg px-2 py-2">
+      <select id="prod-tax-${idx}" class="text-xs font-bold border-2 border-[var(--card-border)] rounded-lg px-2 py-2">
+        <option value="8" ${p.taxRate===8?'selected':''}>8％</option>
+        <option value="10" ${p.taxRate===10?'selected':''}>10％</option>
+      </select>
+      <button class="btn-press text-[var(--red)] font-black text-lg px-2" onclick="removeProduct(${idx})">×</button>
+    `;
+    list.appendChild(row);
+
+    const nameInput = document.getElementById(`prod-name-${idx}`);
+    nameInput.onchange = ()=>{
+      const val = nameInput.value.trim();
+      if(!val){ showToast('商品名を入力してください', '⚠️'); nameInput.value = p.name; return; }
+      products[idx].name = val;
+      saveProducts(products);
+      renderProductGrid();
+      showToast('商品名を変更しました', '✅');
+    };
+
+    const priceInput = document.getElementById(`prod-price-${idx}`);
+    priceInput.onchange = ()=>{
+      const val = parseInt(priceInput.value, 10);
+      if(isNaN(val) || val < 0){ showToast('単価を正しく入力してください', '⚠️'); priceInput.value = p.price; return; }
+      products[idx].price = val;
+      saveProducts(products);
+      renderProductGrid();
+      showToast('単価を変更しました', '✅');
+    };
+
+    const taxSelect = document.getElementById(`prod-tax-${idx}`);
+    taxSelect.onchange = ()=>{
+      products[idx].taxRate = parseInt(taxSelect.value, 10);
+      saveProducts(products);
+      renderProductGrid();
+      showToast('消費税率を変更しました', '✅');
+    };
+  });
+}
+
+function addProduct(){
+  const nameInput = document.getElementById('new-product-name');
+  const priceInput = document.getElementById('new-product-price');
+  const taxSelect = document.getElementById('new-product-tax');
+
+  const name = nameInput.value.trim();
+  const price = parseInt(priceInput.value, 10);
+  const taxRate = parseInt(taxSelect.value, 10);
+
+  if(!name || isNaN(price) || price < 0){
+    showToast('商品名と単価を正しく入力してください', '⚠️');
+    return;
+  }
+
+  products.push({ id:`p_${Date.now()}_${Math.floor(Math.random()*1000)}`, name, price, taxRate, icon:'🍭' });
+  saveProducts(products);
+  renderProductList();
+  renderProductGrid();
+
+  nameInput.value = '';
+  priceInput.value = '';
+  taxSelect.value = '8';
+  showToast('商品を追加しました', '✅');
+}
+
+function removeProduct(idx){
+  const name = products[idx].name;
+  openConfirm(`商品「${name}」を削除します。\n過去の販売データは削除されません。よろしいですか？`, ()=>{
+    products.splice(idx,1);
+    saveProducts(products);
+    renderProductList();
+    renderProductGrid();
+    showToast('商品を削除しました', '🗑');
+  });
+}
+
+/* ============================================================
+   汎用確認ダイアログ（データクリアなど）
+   ============================================================ */
+function openConfirm(message, onOk){
+  document.getElementById('confirm-message').textContent = message;
+  const okBtn = document.getElementById('confirm-ok-btn');
+  const newOkBtn = okBtn.cloneNode(true); // 既存のイベントを解除
+  okBtn.parentNode.replaceChild(newOkBtn, okBtn);
+  newOkBtn.addEventListener('click', ()=>{ onOk(); closeConfirm(); });
+  document.getElementById('confirm-modal').classList.remove('hidden');
+}
+function closeConfirm(){
+  document.getElementById('confirm-modal').classList.add('hidden');
+}
+
+function confirmClear(){
+  openConfirm('本日の販売データをすべて削除します。\nこの操作は元に戻せません。よろしいですか？', ()=>{
+    transactions = [];
+    saveTransactions(transactions);
+    renderDashboard();
+    showToast('本日のデータをクリアしました', '🗑');
+  });
+}
+
+/* ============================================================
+   トースト通知
+   ============================================================ */
+let toastTimer = null;
+function showToast(msg, icon){
+  const toast = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  document.getElementById('toast-icon').textContent = icon || '✅';
+  toast.classList.remove('opacity-0','translate-y-6');
+  toast.classList.add('opacity-100','translate-y-0');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{
+    toast.classList.remove('opacity-100','translate-y-0');
+    toast.classList.add('opacity-0','translate-y-6');
+  }, 2200);
+}
+
+/* ============================================================
+   ユーティリティ
+   ============================================================ */
+function sanitizeId(name){
+  return encodeURIComponent(name).replace(/%/g,'_');
+}
+function escapeHtml(str){
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/* ============================================================
+   ログイン・権限管理
+   （部署ごとにパスワードを分け、マスタ管理・商品管理は管理者のみに制限する）
+   ============================================================ */
+function setLoginMode(mode){
+  document.getElementById('login-tab-dept').classList.toggle('active', mode === 'dept');
+  document.getElementById('login-tab-admin').classList.toggle('active', mode === 'admin');
+  document.getElementById('login-form-dept').classList.toggle('hidden', mode !== 'dept');
+  document.getElementById('login-form-admin').classList.toggle('hidden', mode !== 'admin');
+}
+
+function initLoginScreen(){
+  // 部署選択肢を用意
+  const select = document.getElementById('login-dept-select');
+  select.innerHTML = departments.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+
+  // 管理者パスワードが未設定なら、初回だけ「設定してログイン」にする
+  const adminPw = loadAdminPassword();
+  const isSetup = !adminPw;
+  document.getElementById('login-admin-setup-note').classList.toggle('hidden', !isSetup);
+  document.getElementById('login-admin-confirm-wrap').classList.toggle('hidden', !isSetup);
+  document.getElementById('login-admin-submit').textContent = isSetup ? '設定してログイン' : 'ログイン';
+
+  setLoginMode('dept');
+  document.getElementById('login-dept-password').value = '';
+  document.getElementById('login-admin-password').value = '';
+  document.getElementById('login-admin-password-confirm').value = '';
+  document.getElementById('login-dept-error').classList.add('hidden');
+  document.getElementById('login-admin-error').classList.add('hidden');
+}
+
+function loginAsDepartment(){
+  const dept = document.getElementById('login-dept-select').value;
+  const pw = document.getElementById('login-dept-password').value;
+  const errorEl = document.getElementById('login-dept-error');
+
+  const storedPw = deptPasswords[dept] || '';
+  if(!storedPw){
+    errorEl.textContent = 'この部署にはまだパスワードが設定されていません。管理者にご連絡ください。';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+  if(pw !== storedPw){
+    errorEl.textContent = 'パスワードが正しくありません。';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+  errorEl.classList.add('hidden');
+  completeLogin(dept);
+}
+
+function loginAsAdmin(){
+  const pw = document.getElementById('login-admin-password').value;
+  const errorEl = document.getElementById('login-admin-error');
+  const storedPw = loadAdminPassword();
+
+  if(!storedPw){
+    // 初回設定
+    const confirmPw = document.getElementById('login-admin-password-confirm').value;
+    if(!pw || pw.length < 4){
+      errorEl.textContent = 'パスワードは4文字以上で設定してください。';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    if(pw !== confirmPw){
+      errorEl.textContent = '確認用パスワードが一致しません。';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    saveAdminPassword(pw);
+    errorEl.classList.add('hidden');
+    completeLogin('admin');
+    return;
+  }
+
+  if(pw !== storedPw){
+    errorEl.textContent = 'パスワードが正しくありません。';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+  errorEl.classList.add('hidden');
+  completeLogin('admin');
+}
+
+function completeLogin(role){
+  currentAuthRole = role;
+  if(role !== 'admin'){
+    currentDeptFilter = role; // 部署ログインは自分の部署に固定
+  } else {
+    currentDeptFilter = null;
+  }
+  document.getElementById('login-screen').classList.add('hidden');
+  applyRolePermissions();
+  renderDashboard();
+  renderCustomerGrid();
+}
+
+function logout(){
+  currentAuthRole = null;
+  currentCustomer = null;
+  document.getElementById('screen-order').classList.add('hidden');
+  document.getElementById('screen-customers').classList.remove('hidden');
+  initLoginScreen();
+  document.getElementById('login-screen').classList.remove('hidden');
+}
+
+function applyRolePermissions(){
+  const isAdmin = currentAuthRole === 'admin';
+  document.getElementById('btn-master-customers').classList.toggle('hidden', false); // 利用者マスタは部署ログインでも自分の部署分のみ編集可
+  document.getElementById('btn-master-products').classList.toggle('hidden', !isAdmin);
+  document.getElementById('btn-master-depts').classList.toggle('hidden', !isAdmin);
+  document.getElementById('btn-clear-data').classList.toggle('hidden', !isAdmin);
+  document.getElementById('dept-tabs').classList.toggle('hidden', !isAdmin); // 部署ログインは部署切替タブ自体を出さない
+
+  const badge = document.getElementById('role-badge');
+  badge.textContent = isAdmin ? '👑 管理者としてログイン中' : `🗂 ${currentAuthRole} としてログイン中`;
+}
+
+// このアカウント（役割）が、指定の取引データを見てよいかどうか
+function isTransactionVisible(t){
+  if(currentAuthRole === 'admin' || !currentAuthRole) return true;
+  const cust = customers.find(c => c.code === t.code);
+  return cust ? departmentOf(cust) === currentAuthRole : false;
+}
+// このアカウント（役割）が、指定の利用者を見てよいかどうか（部署ログインは自分の部署のみ）
+function isCustomerVisible(c){
+  if(currentAuthRole === 'admin' || !currentAuthRole) return true;
+  return departmentOf(c) === currentAuthRole;
+}
+
+/* ============================================================
+   初期化
+   ============================================================ */
+initSessionInputs();
+renderDashboard();
+renderCustomerGrid();
+initLoginScreen();
+
+</script>
+</body>
+</html>
