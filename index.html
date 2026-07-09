@@ -1630,12 +1630,13 @@ function confirmClear(){
 function exportSettings(){
   const settings = {
     app: 'baiten-pos',
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     departments: departments,
     customers: customers,
     products: products,
     deptPasswords: deptPasswords,
+    transactions: transactions, // 販売データも含める（端末の引っ越し・バックアップ用）
   };
   const blob = new Blob([JSON.stringify(settings, null, 1)], { type:'application/json' });
   const url = URL.createObjectURL(blob);
@@ -1647,7 +1648,7 @@ function exportSettings(){
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast('設定をエクスポートしました', '⚙');
+  showToast('設定と販売データをエクスポートしました', '⚙');
 }
 
 function importSettings(inputEl){
@@ -1671,7 +1672,12 @@ function importSettings(inputEl){
 
     const custCount = settings.customers.length;
     const deptCount = settings.departments.length;
-    openConfirm(`設定ファイルを読み込みます。\n部署 ${deptCount}件・利用者 ${custCount}名・商品 ${(settings.products||[]).length}件\n\n現在この端末に登録されている利用者・部署・商品は、\nこの内容にすべて置き換えられます（販売データは残ります）。\nよろしいですか？`, ()=>{
+    const hasTx = Array.isArray(settings.transactions) && settings.transactions.length > 0;
+    const txLine = hasTx
+      ? `販売データ ${settings.transactions.length}件も、この端末のデータと置き換えます。`
+      : '販売データはファイルに含まれていないため、この端末のものがそのまま残ります。';
+
+    openConfirm(`設定ファイルを読み込みます。\n部署 ${deptCount}件・利用者 ${custCount}名・商品 ${(settings.products||[]).length}件\n\n現在この端末に登録されている利用者・部署・商品は、\nこの内容にすべて置き換えられます。\n${txLine}\nよろしいですか？`, ()=>{
       departments = settings.departments;
       customers = settings.customers;
       if(Array.isArray(settings.products) && settings.products.length > 0){
@@ -1682,12 +1688,16 @@ function importSettings(inputEl){
         deptPasswords = settings.deptPasswords;
         saveDeptPasswords(deptPasswords);
       }
+      if(hasTx){
+        transactions = settings.transactions;
+        saveTransactions(transactions);
+      }
       saveDepartments(departments);
       saveCustomers(customers);
       currentDeptFilter = null;
       renderDashboard();
       renderCustomerGrid();
-      showToast(`設定を読み込みました（利用者${custCount}名）`, '✅');
+      showToast(`設定を読み込みました（利用者${custCount}名${hasTx ? '・販売データ'+settings.transactions.length+'件' : ''}）`, '✅');
     });
   };
   reader.readAsText(file, 'utf-8');
